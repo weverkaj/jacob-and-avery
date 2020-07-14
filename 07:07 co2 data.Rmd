@@ -1,0 +1,153 @@
+---
+output: html_document
+---
+
+
+```{r}
+#subsetting CO2 standards into different measurements
+mVsubset = subset(CO2_standards, subset = is.na(CO2_standards$`co2mmol/mol`))
+
+mmolsubset = subset(CO2_standards, subset = is.na(CO2_standards$co2mV))
+```
+
+```{r}
+library(tidyverse)
+#linear curves for mV data
+mVsubset = mVsubset %>%
+nest(-date) %>%
+  mutate(fit = map(data, ~lm(`std ppm`~co2mV, data = .)),
+         results = map(fit, generics::tidy)) %>%
+  unnest(results)
+
+```
+
+```{r}
+#linear curves for mmol data 
+mmolsubset = mmolsubset %>%
+  nest(-date) %>%
+  mutate(fit = map(data, ~lm(`std ppm`~`co2mmol/mol`, data = .)),
+         results = map(fit, generics::tidy)) %>%
+  unnest(results)
+
+```
+
+
+```{r}
+#filtering slopes and intercepts
+
+mVIntercept = subset(mVsubset, subset = mVsubset$term == "(Intercept)")
+
+mVSlope = subset(mVsubset, subset = mVsubset$term == "co2mV")
+
+mmolIntercept = subset(mmolsubset, subset = mmolsubset$term == "(Intercept)")
+
+mmolSlope = subset(mmolsubset, subset = mmolsubset$term == "`co2mmol/mol`")
+
+```
+
+```{r}
+# creating slope/intercept tibble functions (mV data)
+
+a = mVIntercept$date
+b = mVIntercept$estimate
+c = mVSlope$estimate
+
+mVdata = tibble(a,b,c)
+```
+
+```{r}
+# creating slope/intercept tibble function (mmol data)
+
+d = mmolIntercept$date
+e = mmolIntercept$estimate
+f = mmolSlope$estimate
+
+mmoldata = tibble(d,e,f)
+```
+
+
+```{r}
+#subsetting co2 data by measurement type
+datasetmV = subset(CO2, subset = !is.na(CO2$`peak heights (mV)`))
+
+datasetmmol = subset(CO2, subset = is.na(CO2$`peak heights (mV)`))
+```
+
+```{r}
+#cleaning up data
+datasetmV = datasetmV %>%
+  rename("date" = "date analysis")
+
+datasetmmol = datasetmmol %>%
+  rename("date" = "date analysis")
+```
+
+```{r}
+#date lubridation of CO2 data
+
+datasetmV = datasetmV %>%
+  mutate(date = lubridate::mdy(date))
+
+datasetmmol = datasetmmol %>%
+  mutate(date = lubridate::mdy(date))
+```
+
+```{r}
+#renaming columns
+mVdata = mVdata %>%
+  rename("date" = "a", "intercept" = "b", "slope" = "c") %>%
+  mutate(date = lubridate::mdy(date))
+
+mmoldata = mmoldata %>%
+  rename("date" = "d", "intercept" = "e", "slope" = "f") %>%
+  mutate(date = lubridate::mdy(date))
+```
+
+
+```{r}
+#joining by date
+
+finalmV = left_join(datasetmV, mVdata, by="date")
+
+finalmmol = left_join(datasetmmol, mmoldata, by="date")
+```
+
+```{r}
+#computing ppm 
+finalmV= finalmV %>%
+  mutate(ppm = (finalmV$`peak heights (mV)`* finalmV$slope + finalmV$intercept))
+
+finalmmol = finalmmol %>%
+  mutate(ppm = (finalmmol$`peak heights (um/m)`* finalmmol$slope + finalmmol$intercept))
+```
+
+```{r}
+#joining the two measurements
+complete = rbind(finalmV,finalmmol)
+```
+
+```{r} 
+#cleaning complete dataset
+complete = complete %>%
+  select(-`date collection`, -component, -`peak heights (mV)`, -`peak heights (um/m)`, -`QC(Y/N)`, -standard_type, -standard_ppm, -`field temp (kelvin)`, -`pressure (atm)`, -slope, -intercept)
+```
+
+```{r}
+#adding bucket volume/area data
+complete2 = left_join(complete, buckets, by = "bucket")
+
+```
+
+```{r}
+#pivoting daily highs
+dailytemp = pivot_longer(dailyhighs, cols = -c(OBJECTID, Plot_ID, Treatment, ORIG_FID)) %>%
+  mutate(date = str_remove(name, "high")) %>%
+  select(-name) %>% 
+  mutate() %>%
+
+```
+
+```{r}
+
+```
+
